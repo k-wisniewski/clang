@@ -172,6 +172,10 @@ def DynamicTypeChecker : Checker<"DynamicTypeChecker">,
   HelpText<"Check for cases where the dynamic and the static type of an object are unrelated.">,
   DescFile<"DynamicTypeChecker.cpp">;
 
+def InfiniteRecursionChecker : Checker<"InfiniteRecursionChecker">,
+  HelpText<"Check for cases of infinite recursion.">,
+  DescFile<"InfiniteRecursionChecker.cpp">;
+
 } // end "alpha.core"
 
 let ParentPackage = Nullability in {
