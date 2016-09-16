@@ -21,19 +21,27 @@ using namespace clang;
 using namespace ento;
 
 namespace {
-class InfiniteRecursionChecker : public Checker<check::PreCall> {
+class InfiniteRecursionChecker : public Checker<check::PreCall, check::RegionChanges> {
   mutable std::unique_ptr<BugType> BT;
 
   void emitReport(CheckerContext &C) const;
 
-  SVal getStackFrameArg(const ProgramStateRef &state,
-                        const StackFrameContext *stackFrameCtx,
-                        unsigned int argIdx) const;
+  Optional<SVal> getStackFrameArg(const ProgramStateRef &state,
+                                  const StackFrameContext *stackFrameCtx,
+                                  unsigned int argIdx) const;
 
   bool compareArgs(CheckerContext &C, const ProgramStateRef &state, const SVal &curArg, const SVal &prevArg) const;
 
 public:
   void checkPreCall(const CallEvent &Call, CheckerContext &C) const;
+
+  bool wantsRegionChangeUpdate(ProgramStateRef State) const;
+
+  ProgramStateRef checkRegionChanges(ProgramStateRef State,
+                                     const InvalidatedSymbols *Invalidated,
+                                     ArrayRef<const MemRegion *> ExplicitRegions,
+                                     ArrayRef<const MemRegion *> Regions,
+                                     const CallEvent *Call) const;
 };
 }
 
@@ -43,6 +51,7 @@ void InfiniteRecursionChecker::checkPreCall(const CallEvent &Call,
   const FunctionDecl *curFuncDecl = (const FunctionDecl *) C.getStackFrame()->getDecl();
 
   const ProgramStateRef state = C.getState();
+
 
   for (const auto *parentLC = C.getStackFrame()->getParent(); parentLC != nullptr; parentLC = parentLC->getParent()) {
     const StackFrameContext *prevStackFrameCtx = parentLC->getCurrentStackFrame();
@@ -54,9 +63,11 @@ void InfiniteRecursionChecker::checkPreCall(const CallEvent &Call,
     bool sameArguments = true;
     for (unsigned i = 0; sameArguments && i < curFuncDecl->getNumParams(); ++i) {
       SVal curArg = Call.getArgSVal(i);
-      SVal prevArg = getStackFrameArg(state, prevStackFrameCtx, i);
+      Optional<SVal> prevArg = getStackFrameArg(state, prevStackFrameCtx, i);
+      if (!prevArg)
+        break;
 
-      sameArguments = sameArguments && compareArgs(C, state, curArg, prevArg);
+      sameArguments = sameArguments && compareArgs(C, state, curArg, *prevArg);
     }
 
     if (sameArguments)
@@ -86,14 +97,30 @@ bool InfiniteRecursionChecker::compareArgs(CheckerContext &C,
   return true;
 }
 
-SVal InfiniteRecursionChecker::getStackFrameArg(const ProgramStateRef &state,
+Optional<SVal> InfiniteRecursionChecker::getStackFrameArg(const ProgramStateRef &state,
                                                 const StackFrameContext *stackFrameCtx,
                                                 unsigned int argIdx) const {
-  const Stmt *callSite = stackFrameCtx->getCallSite();
-  const CallExpr *callSiteExpr = dyn_cast<CallExpr>(callSite);
-  const Expr *argExpr = callSiteExpr->getArg(argIdx);
-  SVal prevArg = state->getSVal(argExpr, stackFrameCtx->getParent());
-  return prevArg;
+  const FunctionDecl *functionDecl = stackFrameCtx->getDecl()->getAsFunction();
+  unsigned numArgs = functionDecl->getNumParams();
+  if (numArgs > 0 && argIdx < numArgs) {
+    const VarDecl *argDecl = functionDecl->parameters()[argIdx];
+    const Loc argLoc = state->getLValue(argDecl, stackFrameCtx);
+    SVal argSVal = state->getSVal(argLoc);
+    return Optional<SVal>(argSVal);
+  }
+  return Optional<SVal>();
+}
+
+bool InfiniteRecursionChecker::wantsRegionChangeUpdate(ProgramStateRef State) const {
+  return false;
+}
+
+ProgramStateRef InfiniteRecursionChecker::checkRegionChanges(ProgramStateRef State,
+                                     const InvalidatedSymbols *Invalidated,
+                                     ArrayRef<const MemRegion *> ExplicitRegions,
+                                     ArrayRef<const MemRegion *> Regions,
+                                     const CallEvent *Call) const {
+  return State;
 }
 
 void InfiniteRecursionChecker::emitReport(CheckerContext &C) const {
@@ -107,3 +134,4 @@ void InfiniteRecursionChecker::emitReport(CheckerContext &C) const {
 void ento::registerInfiniteRecursionChecker(CheckerManager &mgr) {
   mgr.registerChecker<InfiniteRecursionChecker>();
 }
+
