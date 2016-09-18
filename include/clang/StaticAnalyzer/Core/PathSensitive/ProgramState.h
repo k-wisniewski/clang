@@ -230,11 +230,12 @@ public:
 
   ProgramStateRef bindLoc(Loc location,
                           SVal V,
+                          const LocationContext *LCtx,
                           bool notifyChanges = true) const;
 
   ProgramStateRef bindLoc(SVal location, SVal V) const;
 
-  ProgramStateRef bindDefault(SVal loc, SVal V) const;
+  ProgramStateRef bindDefault(SVal loc, SVal V, const LocationContext *LCtx) const;
 
   ProgramStateRef killBinding(Loc LV) const;
 

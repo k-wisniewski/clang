@@ -321,14 +321,17 @@ class RegionChanges {
                       const InvalidatedSymbols *invalidated,
                       ArrayRef<const MemRegion *> Explicits,
                       ArrayRef<const MemRegion *> Regions,
-                      const CallEvent *Call) {
-    return ((const CHECKER *)checker)->checkRegionChanges(state, invalidated,
-                                                      Explicits, Regions, Call);
+                      const CallEvent *Call,
+                      const LocationContext *LCtx) {
+    return ((const CHECKER *) checker)->checkRegionChanges(state, invalidated,
+                                                           Explicits, Regions,
+                                                           Call, LCtx);
   }
   template <typename CHECKER>
   static bool _wantsRegionChangeUpdate(void *checker,
-                                       ProgramStateRef state) {
-    return ((const CHECKER *)checker)->wantsRegionChangeUpdate(state);
+                                       ProgramStateRef state,
+                                       const LocationContext *LCtx) {
+    return ((const CHECKER *) checker)->wantsRegionChangeUpdate(state, LCtx);
   }
 
 public:

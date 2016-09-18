@@ -30,38 +30,47 @@ class InfiniteRecursionChecker : public Checker<check::PreCall, check::RegionCha
                                   const StackFrameContext *stackFrameCtx,
                                   unsigned int argIdx) const;
 
+  ArrayRef<SVal> getStackFrameArgs(const ProgramStateRef &state, const StackFrameContext *stackFrameCtx) const;
+
   bool compareArgs(CheckerContext &C, const ProgramStateRef &state, const SVal &curArg, const SVal &prevArg) const;
 
 public:
   void checkPreCall(const CallEvent &Call, CheckerContext &C) const;
 
-  bool wantsRegionChangeUpdate(ProgramStateRef State) const;
+  bool wantsRegionChangeUpdate(ProgramStateRef State, const LocationContext *LCtx) const;
 
   ProgramStateRef checkRegionChanges(ProgramStateRef State,
                                      const InvalidatedSymbols *Invalidated,
                                      ArrayRef<const MemRegion *> ExplicitRegions,
                                      ArrayRef<const MemRegion *> Regions,
-                                     const CallEvent *Call) const;
+                                     const CallEvent *Call,
+                                     const LocationContext *LCtx) const;
 };
 }
 
 void InfiniteRecursionChecker::checkPreCall(const CallEvent &Call,
                                             CheckerContext &C) const {
 
-  const FunctionDecl *curFuncDecl = (const FunctionDecl *) C.getStackFrame()->getDecl();
+  const FunctionDecl *CurFuncDecl = (const FunctionDecl *) C.getStackFrame()->getDecl();
+  CurFuncDecl = CurFuncDecl->getCanonicalDecl();
 
   const ProgramStateRef state = C.getState();
 
 
   for (const auto *parentLC = C.getStackFrame()->getParent(); parentLC != nullptr; parentLC = parentLC->getParent()) {
+    if (parentLC->getKind() != LocationContext::StackFrame)
+      continue;
+
     const StackFrameContext *prevStackFrameCtx = parentLC->getCurrentStackFrame();
     const FunctionDecl *prevFuncDecl = (const FunctionDecl *) prevStackFrameCtx->getDecl();
+    prevFuncDecl = prevFuncDecl->getCanonicalDecl();
 
-    if (prevFuncDecl->getIdentifier() != curFuncDecl->getIdentifier())
+    if (prevFuncDecl != CurFuncDecl)
       continue;
 
     bool sameArguments = true;
-    for (unsigned i = 0; sameArguments && i < curFuncDecl->getNumParams(); ++i) {
+
+    for (unsigned i = 0; sameArguments && i < CurFuncDecl->getNumParams(); ++i) {
       SVal curArg = Call.getArgSVal(i);
       Optional<SVal> prevArg = getStackFrameArg(state, prevStackFrameCtx, i);
       if (!prevArg)
@@ -97,6 +106,11 @@ bool InfiniteRecursionChecker::compareArgs(CheckerContext &C,
   return true;
 }
 
+ArrayRef<SVal> InfiniteRecursionChecker::getStackFrameArgs(const ProgramStateRef &state,
+                                                           const StackFrameContext *stackFrameCtx) const {
+
+}
+
 Optional<SVal> InfiniteRecursionChecker::getStackFrameArg(const ProgramStateRef &state,
                                                 const StackFrameContext *stackFrameCtx,
                                                 unsigned int argIdx) const {
@@ -108,10 +122,11 @@ Optional<SVal> InfiniteRecursionChecker::getStackFrameArg(const ProgramStateRef 
     SVal argSVal = state->getSVal(argLoc);
     return Optional<SVal>(argSVal);
   }
-  return Optional<SVal>();
+  return None;
 }
 
-bool InfiniteRecursionChecker::wantsRegionChangeUpdate(ProgramStateRef State) const {
+bool InfiniteRecursionChecker::wantsRegionChangeUpdate(ProgramStateRef State,
+                                                       const LocationContext *LCtx) const {
   return false;
 }
 
@@ -119,14 +134,19 @@ ProgramStateRef InfiniteRecursionChecker::checkRegionChanges(ProgramStateRef Sta
                                      const InvalidatedSymbols *Invalidated,
                                      ArrayRef<const MemRegion *> ExplicitRegions,
                                      ArrayRef<const MemRegion *> Regions,
-                                     const CallEvent *Call) const {
+                                     const CallEvent *Call,
+                                     const LocationContext *LCtx) const {
   return State;
 }
 
 void InfiniteRecursionChecker::emitReport(CheckerContext &C) const {
   if (!BT)
     BT.reset(new BugType(this, "Infinite recursion detected", "InfiniteRecursionChecker"));
+
   ExplodedNode *node = C.generateErrorNode();
+  if (!node)
+    return;
+
   auto report = llvm::make_unique<BugReport>(*BT, BT->getName(), node);
   C.emitReport(std::move(report));
 }

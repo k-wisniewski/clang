@@ -317,7 +317,7 @@ void ExprEngine::VisitCXXConstructExpr(const CXXConstructExpr *CE,
         // actually make things worse. Placement new makes this tricky as well,
         // since it's then possible to be initializing one part of a multi-
         // dimensional array.
-        State = State->bindDefault(loc::MemRegionVal(Target), ZeroVal);
+        State = State->bindDefault(loc::MemRegionVal(Target), ZeroVal, LCtx);
         Bldr.generateNode(CE, *I, State, /*tag=*/nullptr,
                           ProgramPoint::PreStmtKind);
       }

@@ -519,9 +519,9 @@ void CheckerManager::runCheckersForDeadSymbols(ExplodedNodeSet &Dst,
 }
 
 /// \brief True if at least one checker wants to check region changes.
-bool CheckerManager::wantsRegionChangeUpdate(ProgramStateRef state) {
+bool CheckerManager::wantsRegionChangeUpdate(ProgramStateRef state, const LocationContext *LCtx) {
   for (unsigned i = 0, e = RegionChangesCheckers.size(); i != e; ++i)
-    if (RegionChangesCheckers[i].WantUpdateFn(state))
+    if (RegionChangesCheckers[i].WantUpdateFn(state, LCtx))
       return true;
 
   return false;
@@ -533,14 +533,16 @@ CheckerManager::runCheckersForRegionChanges(ProgramStateRef state,
                                     const InvalidatedSymbols *invalidated,
                                     ArrayRef<const MemRegion *> ExplicitRegions,
                                     ArrayRef<const MemRegion *> Regions,
-                                    const CallEvent *Call) {
+                                    const CallEvent *Call,
+                                    const LocationContext *LCtx) {
   for (unsigned i = 0, e = RegionChangesCheckers.size(); i != e; ++i) {
     // If any checker declares the state infeasible (or if it starts that way),
     // bail out.
     if (!state)
       return nullptr;
     state = RegionChangesCheckers[i].CheckFn(state, invalidated,
-                                             ExplicitRegions, Regions, Call);
+                                             ExplicitRegions, Regions,
+                                             Call, LCtx);
   }
   return state;
 }

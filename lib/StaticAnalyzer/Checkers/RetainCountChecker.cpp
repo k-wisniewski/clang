@@ -2647,9 +2647,10 @@ public:
                      const InvalidatedSymbols *invalidated,
                      ArrayRef<const MemRegion *> ExplicitRegions,
                      ArrayRef<const MemRegion *> Regions,
-                     const CallEvent *Call) const;
+                     const CallEvent *Call,
+                     const LocationContext* LCtx) const;
 
-  bool wantsRegionChangeUpdate(ProgramStateRef state) const {
+  bool wantsRegionChangeUpdate(ProgramStateRef state, const LocationContext *LCtx) const {
     return true;
   }
 
@@ -3708,7 +3709,8 @@ RetainCountChecker::checkRegionChanges(ProgramStateRef state,
                                     const InvalidatedSymbols *invalidated,
                                     ArrayRef<const MemRegion *> ExplicitRegions,
                                     ArrayRef<const MemRegion *> Regions,
-                                    const CallEvent *Call) const {
+                                    const CallEvent *Call,
+                                    const LocationContext *LCtx) const {
   if (!invalidated)
     return state;
 

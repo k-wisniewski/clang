@@ -323,7 +323,7 @@ public:
                                  ProgramPoint::Kind K);
 
   /// \brief True if at least one checker wants to check region changes.
-  bool wantsRegionChangeUpdate(ProgramStateRef state);
+  bool wantsRegionChangeUpdate(ProgramStateRef state, const LocationContext *LCtx);
 
   /// \brief Run checkers for region changes.
   ///
@@ -341,7 +341,8 @@ public:
                               const InvalidatedSymbols *invalidated,
                               ArrayRef<const MemRegion *> ExplicitRegions,
                               ArrayRef<const MemRegion *> Regions,
-                              const CallEvent *Call);
+                              const CallEvent *Call,
+                              const LocationContext *LCtx);
 
   /// \brief Run checkers when pointers escape.
   ///
@@ -449,10 +450,11 @@ public:
                                 const InvalidatedSymbols *symbols,
                                 ArrayRef<const MemRegion *> ExplicitRegions,
                                 ArrayRef<const MemRegion *> Regions,
-                                const CallEvent *Call)>
+                                const CallEvent *Call,
+                                const LocationContext *LCtx)>
       CheckRegionChangesFunc;
   
-  typedef CheckerFn<bool (ProgramStateRef)> WantsRegionChangeUpdateFunc;
+  typedef CheckerFn<bool (ProgramStateRef, const LocationContext *)> WantsRegionChangeUpdateFunc;
 
   typedef CheckerFn<ProgramStateRef (ProgramStateRef,
                                      const InvalidatedSymbols &Escaped,

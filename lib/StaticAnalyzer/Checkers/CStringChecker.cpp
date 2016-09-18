@@ -62,14 +62,15 @@ public:
   void checkPreStmt(const DeclStmt *DS, CheckerContext &C) const;
   void checkLiveSymbols(ProgramStateRef state, SymbolReaper &SR) const;
   void checkDeadSymbols(SymbolReaper &SR, CheckerContext &C) const;
-  bool wantsRegionChangeUpdate(ProgramStateRef state) const;
+  bool wantsRegionChangeUpdate(ProgramStateRef state, const LocationContext *LCtx) const;
 
   ProgramStateRef
     checkRegionChanges(ProgramStateRef state,
                        const InvalidatedSymbols *,
                        ArrayRef<const MemRegion *> ExplicitRegions,
                        ArrayRef<const MemRegion *> Regions,
-                       const CallEvent *Call) const;
+                       const CallEvent *Call,
+                       const LocationContext *LCtx) const;
 
   typedef void (CStringChecker::*FnCheck)(CheckerContext &,
                                           const CallExpr *) const;
@@ -2112,7 +2113,8 @@ void CStringChecker::checkPreStmt(const DeclStmt *DS, CheckerContext &C) const {
   C.addTransition(state);
 }
 
-bool CStringChecker::wantsRegionChangeUpdate(ProgramStateRef state) const {
+bool CStringChecker::wantsRegionChangeUpdate(ProgramStateRef state,
+                                             const LocationContext *LCtx) const {
   CStringLengthTy Entries = state->get<CStringLength>();
   return !Entries.isEmpty();
 }
@@ -2122,7 +2124,8 @@ CStringChecker::checkRegionChanges(ProgramStateRef state,
                                    const InvalidatedSymbols *,
                                    ArrayRef<const MemRegion *> ExplicitRegions,
                                    ArrayRef<const MemRegion *> Regions,
-                                   const CallEvent *Call) const {
+                                   const CallEvent *Call,
+                                   const LocationContext *LCtx) const {
   CStringLengthTy Entries = state->get<CStringLength>();
   if (Entries.isEmpty())
     return state;

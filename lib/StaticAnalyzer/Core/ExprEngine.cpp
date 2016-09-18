@@ -262,8 +262,9 @@ ProgramStateRef ExprEngine::processAssume(ProgramStateRef state,
   return getCheckerManager().runCheckersForEvalAssume(state, cond, assumption);
 }
 
-bool ExprEngine::wantsRegionChangeUpdate(ProgramStateRef state) {
-  return getCheckerManager().wantsRegionChangeUpdate(state);
+bool ExprEngine::wantsRegionChangeUpdate(ProgramStateRef state,
+                                         const LocationContext *LCtx) {
+  return getCheckerManager().wantsRegionChangeUpdate(state, LCtx);
 }
 
 ProgramStateRef
@@ -271,9 +272,11 @@ ExprEngine::processRegionChanges(ProgramStateRef state,
                                  const InvalidatedSymbols *invalidated,
                                  ArrayRef<const MemRegion *> Explicits,
                                  ArrayRef<const MemRegion *> Regions,
-                                 const CallEvent *Call) {
+                                 const CallEvent *Call,
+                                 const LocationContext *LCtx) {
   return getCheckerManager().runCheckersForRegionChanges(state, invalidated,
-                                                      Explicits, Regions, Call);
+                                                         Explicits, Regions,
+                                                         Call, LCtx);
 }
 
 void ExprEngine::printState(raw_ostream &Out, ProgramStateRef State,
@@ -2262,7 +2265,7 @@ void ExprEngine::evalBind(ExplodedNodeSet &Dst, const Stmt *StoreE,
     // For initializations, we do not need to inform clients of region
     // changes.
     state = state->bindLoc(location.castAs<Loc>(),
-                           Val, /* notifyChanges = */ !atDeclInit);
+                           Val, LC, /* notifyChanges = */ !atDeclInit);
 
     const MemRegion *LocReg = nullptr;
     if (Optional<loc::MemRegionVal> LocRegVal =

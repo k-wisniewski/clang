@@ -126,7 +126,8 @@ public:
 
   /// wantsRegionChangeUpdate - Called by ProgramStateManager to determine if a
   ///  region change should trigger a processRegionChanges update.
-  virtual bool wantsRegionChangeUpdate(ProgramStateRef state) = 0;
+  virtual bool wantsRegionChangeUpdate(ProgramStateRef state,
+                                       const LocationContext *LCtx) = 0;
 
   /// processRegionChanges - Called by ProgramStateManager whenever a change is
   /// made to the store. Used to update checkers that track region values.
@@ -135,13 +136,15 @@ public:
                        const InvalidatedSymbols *invalidated,
                        ArrayRef<const MemRegion *> ExplicitRegions,
                        ArrayRef<const MemRegion *> Regions,
-                       const CallEvent *Call) = 0;
+                       const CallEvent *Call,
+                       const LocationContext *LCtx) = 0;
 
 
   inline ProgramStateRef 
   processRegionChange(ProgramStateRef state,
-                      const MemRegion* MR) {
-    return processRegionChanges(state, nullptr, MR, MR, nullptr);
+                      const MemRegion* MR,
+                      const LocationContext *LCtx) {
+    return processRegionChanges(state, nullptr, MR, MR, nullptr, LCtx);
   }
 
   virtual ProgramStateRef

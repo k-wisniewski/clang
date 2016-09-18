@@ -288,7 +288,7 @@ public:
 
   /// wantsRegionChangeUpdate - Called by ProgramStateManager to determine if a
   ///  region change should trigger a processRegionChanges update.
-  bool wantsRegionChangeUpdate(ProgramStateRef state) override;
+  bool wantsRegionChangeUpdate(ProgramStateRef state, const LocationContext *LCtx) override;
 
   /// processRegionChanges - Called by ProgramStateManager whenever a change is made
   ///  to the store. Used to update checkers that track region values.
@@ -297,7 +297,8 @@ public:
                        const InvalidatedSymbols *invalidated,
                        ArrayRef<const MemRegion *> ExplicitRegions,
                        ArrayRef<const MemRegion *> Regions,
-                       const CallEvent *Call) override;
+                       const CallEvent *Call,
+                       const LocationContext *LCtx) override;
 
   /// printState - Called by ProgramStateManager to print checker-specific data.
   void printState(raw_ostream &Out, ProgramStateRef State,
