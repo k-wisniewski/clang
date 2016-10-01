@@ -38,7 +38,7 @@ add_clang_library(clangStaticAnalyzerCheckers
   FixedAddressChecker.cpp
   GenericTaintChecker.cpp
   IdenticalExprChecker.cpp
-  InfiniteRecursionChecker.cpp
+        RecursionChecker.cpp
   IvarInvalidationChecker.cpp
   LLVMConventionsChecker.cpp
   LocalizationChecker.cpp
