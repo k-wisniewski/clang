@@ -1,4 +1,5 @@
-//InfiniteRecursionChecker.cpp - Test if function is infinitely recursive--*--//
+// InfiniteRecursionChecker.cpp - Test if function is infinitely
+// recursive--*--//
 //
 //                     The LLVM Compiler Infrastructure
 //
@@ -21,20 +22,15 @@ using namespace clang;
 using namespace ento;
 
 namespace {
-class DirtyStackFrameState {
+class DirtyStackFrameState {};
 
-};
-
-class RecursionChecker : public Checker<check::PreCall,
-                                        check::RegionChanges> {
+class RecursionChecker : public Checker<check::PreCall, check::RegionChanges> {
   mutable std::unique_ptr<BugType> BT;
 
   void emitReport(CheckerContext &C) const;
 
-  bool compareArgs(CheckerContext &C,
-                   const ProgramStateRef &State,
-                   const SVal &CurArg,
-                   const SVal &PrevArg) const;
+  bool compareArgs(CheckerContext &C, const ProgramStateRef &State,
+                   const SVal &CurArg, const SVal &PrevArg) const;
 
 public:
   void checkPreCall(const CallEvent &Call, CheckerContext &C) const;
@@ -42,20 +38,20 @@ public:
   bool wantsRegionChangeUpdate(ProgramStateRef State,
                                const LocationContext *LCtx) const;
 
-  ProgramStateRef checkRegionChanges(ProgramStateRef State,
-                                     const InvalidatedSymbols *Invalidated,
-                                     ArrayRef<const MemRegion *> ExplicitRegions,
-                                     ArrayRef<const MemRegion *> Regions,
-                                     const CallEvent *Call,
-                                     const LocationContext *LCtx) const;
+  ProgramStateRef
+  checkRegionChanges(ProgramStateRef State,
+                     const InvalidatedSymbols *Invalidated,
+                     ArrayRef<const MemRegion *> ExplicitRegions,
+                     ArrayRef<const MemRegion *> Regions, const CallEvent *Call,
+                     const LocationContext *LCtx) const;
 };
 }
 
 void RecursionChecker::checkPreCall(const CallEvent &Call,
-                                            CheckerContext &C) const {
+                                    CheckerContext &C) const {
 
-  const FunctionDecl
-      *CurFuncDecl = (const FunctionDecl *) C.getStackFrame()->getDecl();
+  const FunctionDecl *CurFuncDecl =
+      (const FunctionDecl *)C.getStackFrame()->getDecl();
   CurFuncDecl = CurFuncDecl->getCanonicalDecl();
 
   const ProgramStateRef State = C.getState();
@@ -65,10 +61,10 @@ void RecursionChecker::checkPreCall(const CallEvent &Call,
     if (ParentLC->getKind() != LocationContext::StackFrame)
       continue;
 
-    const StackFrameContext
-        *PrevStackFrameCtx = ParentLC->getCurrentStackFrame();
-    const FunctionDecl
-        *PrevFuncDecl = (const FunctionDecl *) PrevStackFrameCtx->getDecl();
+    const StackFrameContext *PrevStackFrameCtx =
+        ParentLC->getCurrentStackFrame();
+    const FunctionDecl *PrevFuncDecl =
+        (const FunctionDecl *)PrevStackFrameCtx->getDecl();
     PrevFuncDecl = PrevFuncDecl->getCanonicalDecl();
 
     if (PrevFuncDecl != CurFuncDecl)
@@ -88,16 +84,13 @@ void RecursionChecker::checkPreCall(const CallEvent &Call,
 }
 
 bool RecursionChecker::compareArgs(CheckerContext &C,
-                                           const ProgramStateRef &state,
-                                           const SVal &curArg,
-                                           const SVal &prevArg) const {
+                                   const ProgramStateRef &state,
+                                   const SVal &curArg,
+                                   const SVal &prevArg) const {
   SValBuilder &sValBuilder = C.getSValBuilder();
   ConstraintManager &constraintManager = C.getConstraintManager();
 
-  SVal argsEqualSVal = sValBuilder.evalBinOp(state,
-                                             BO_EQ,
-                                             curArg,
-                                             prevArg,
+  SVal argsEqualSVal = sValBuilder.evalBinOp(state, BO_EQ, curArg, prevArg,
                                              sValBuilder.getConditionType());
   Optional<DefinedSVal> argsEqual = argsEqualSVal.getAs<DefinedSVal>();
 
@@ -113,27 +106,23 @@ bool RecursionChecker::compareArgs(CheckerContext &C,
   return true;
 }
 
-bool
-RecursionChecker::wantsRegionChangeUpdate(ProgramStateRef State,
-                                          const LocationContext *LCtx) const {
+bool RecursionChecker::wantsRegionChangeUpdate(
+    ProgramStateRef State, const LocationContext *LCtx) const {
   return false;
 }
 
-ProgramStateRef
-RecursionChecker::checkRegionChanges(ProgramStateRef State,
-                                     const InvalidatedSymbols *Invalidated,
-                                     ArrayRef<const MemRegion *> ExplicitRegions,
-                                     ArrayRef<const MemRegion *> Regions,
-                                     const CallEvent *Call,
-                                     const LocationContext *LCtx) const {
+ProgramStateRef RecursionChecker::checkRegionChanges(
+    ProgramStateRef State, const InvalidatedSymbols *Invalidated,
+    ArrayRef<const MemRegion *> ExplicitRegions,
+    ArrayRef<const MemRegion *> Regions, const CallEvent *Call,
+    const LocationContext *LCtx) const {
   return State;
 }
 
 void RecursionChecker::emitReport(CheckerContext &C) const {
   if (!BT)
-    BT.reset(new BugType(this,
-                         "Infinite recursion detected",
-                         "RecursionChecker"));
+    BT.reset(
+        new BugType(this, "Infinite recursion detected", "RecursionChecker"));
 
   ExplodedNode *node = C.generateErrorNode();
   if (!node)
@@ -146,4 +135,3 @@ void RecursionChecker::emitReport(CheckerContext &C) const {
 void ento::registerRecursionChecker(CheckerManager &mgr) {
   mgr.registerChecker<RecursionChecker>();
 }
-
