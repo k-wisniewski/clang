@@ -31,10 +31,6 @@ class RecursionChecker : public Checker<check::PreCall,
 
   void emitReport(CheckerContext &C) const;
 
-  Optional<SVal> getStackFrameArg(const ProgramStateRef &State,
-                                  const StackFrameContext *SFC,
-                                  unsigned int ArgIdx) const;
-
   bool compareArgs(CheckerContext &C,
                    const ProgramStateRef &State,
                    const SVal &CurArg,
@@ -82,11 +78,8 @@ void RecursionChecker::checkPreCall(const CallEvent &Call,
     for (unsigned i = 0; SameArguments && i < CurFuncDecl->getNumParams();
          ++i) {
       SVal CurArg = Call.getArgSVal(i);
-      Optional<SVal> PrevArg = getStackFrameArg(State, PrevStackFrameCtx, i);
-      if (!PrevArg)
-        break;
-
-      SameArguments = SameArguments && compareArgs(C, State, CurArg, *PrevArg);
+      SVal PrevArg = State->getArgSVal(PrevStackFrameCtx, i);
+      SameArguments = SameArguments && compareArgs(C, State, CurArg, PrevArg);
     }
 
     if (SameArguments)
@@ -118,28 +111,6 @@ bool RecursionChecker::compareArgs(CheckerContext &C,
     return false;
 
   return true;
-}
-
-Optional<SVal>
-RecursionChecker::getStackFrameArg(const ProgramStateRef &State,
-                                   const StackFrameContext *SFC,
-                                   unsigned int ArgIdx) const {
-  const FunctionDecl *FunctionDecl = SFC->getDecl()->getAsFunction();
-  unsigned NumArgs = FunctionDecl->getNumParams();
-  if (NumArgs > 0 && ArgIdx < NumArgs) {
-    if (SFC->inTopFrame()) {
-      const VarDecl *ArgDecl = FunctionDecl->parameters()[ArgIdx];
-      const Loc ArgLoc = State->getLValue(ArgDecl, SFC);
-      return Optional<SVal>(State->getSVal(ArgLoc));
-    } else {
-      const Stmt *callSite = SFC->getCallSite();
-      const CallExpr *callSiteExpr = dyn_cast<CallExpr>(callSite);
-      const Expr *argExpr = callSiteExpr->getArg(ArgIdx);
-      return Optional<SVal>(State->getSVal(argExpr, SFC->getParent()));
-    }
-  }
-
-  return None;
 }
 
 bool

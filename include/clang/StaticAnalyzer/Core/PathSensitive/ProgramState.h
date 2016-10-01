@@ -294,6 +294,10 @@ public:
   /// Get the lvalue for an array index.
   SVal getLValue(QualType ElementType, SVal Idx, SVal Base) const;
 
+  /// Get the symbolic value of arguments used in a call
+  /// that created the given stack frame
+  SVal getArgSVal(const StackFrameContext *SFC, const unsigned ArgIdx) const;
+
   /// Returns the SVal bound to the statement 'S' in the state's environment.
   SVal getSVal(const Stmt *S, const LocationContext *LCtx) const;
   
@@ -723,6 +727,28 @@ inline SVal ProgramState::getLValue(QualType ElementType, SVal Idx, SVal Base) c
   if (Optional<NonLoc> N = Idx.getAs<NonLoc>())
     return getStateManager().StoreMgr->getLValueElement(ElementType, *N, Base);
   return UnknownVal();
+}
+
+inline SVal ProgramState::getArgSVal(const StackFrameContext *SFC,
+                              const unsigned ArgIdx) const {
+  const FunctionDecl *FunctionDecl = SFC->getDecl()->getAsFunction();
+  unsigned NumArgs = FunctionDecl->getNumParams();
+  assert(ArgIdx < NumArgs && "Arg access out of range!");
+
+  if (SFC->inTopFrame()) {
+    // if we are in the top frame we don't have any arguments bound in the store
+    // because the call wasn't modeled in the first place.
+    const VarDecl *ArgDecl = FunctionDecl->parameters()[ArgIdx];
+    const Loc ArgLoc = getLValue(ArgDecl, SFC);
+    return getSVal(ArgLoc);
+  } else {
+    // in this case we need to ask the environment as  the arguments' memory
+    // region may have been purged as no longer needed.
+    const Stmt *callSite = SFC->getCallSite();
+    const CallExpr *callSiteExpr = dyn_cast<CallExpr>(callSite);
+    const Expr *argExpr = callSiteExpr->getArg(ArgIdx);
+    return getSVal(argExpr, SFC->getParent());
+  }
 }
 
 inline SVal ProgramState::getSVal(const Stmt *Ex,
