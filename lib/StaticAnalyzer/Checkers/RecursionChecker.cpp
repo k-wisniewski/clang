@@ -22,9 +22,9 @@ using namespace clang;
 using namespace ento;
 
 namespace {
-class DirtyStackFrameState {};
 
-class RecursionChecker : public Checker<check::PreCall, check::RegionChanges> {
+class RecursionChecker
+    : public Checker<check::PreCall, check::RegionChanges, check::PostCall> {
   mutable std::unique_ptr<BugType> BT;
 
   void emitReport(CheckerContext &C) const;
@@ -44,8 +44,12 @@ public:
                      ArrayRef<const MemRegion *> ExplicitRegions,
                      ArrayRef<const MemRegion *> Regions, const CallEvent *Call,
                      const LocationContext *LCtx) const;
+  void checkPostCall(const CallEvent &Call,
+                                       CheckerContext &C) const;
 };
 }
+
+REGISTER_SET_WITH_PROGRAMSTATE(DirtyStackFrames, const StackFrameContext *)
 
 void RecursionChecker::checkPreCall(const CallEvent &Call,
                                     CheckerContext &C) const {
@@ -55,11 +59,16 @@ void RecursionChecker::checkPreCall(const CallEvent &Call,
   CurFuncDecl = CurFuncDecl->getCanonicalDecl();
 
   const ProgramStateRef State = C.getState();
+  const DirtyStackFramesTy DirtyStackFramesSet = State->get<DirtyStackFrames>();
 
   for (const auto *ParentLC = C.getStackFrame()->getParent();
        ParentLC != nullptr; ParentLC = ParentLC->getParent()) {
+
     if (ParentLC->getKind() != LocationContext::StackFrame)
       continue;
+
+    if (DirtyStackFramesSet.contains(ParentLC->getCurrentStackFrame()))
+      break;
 
     const StackFrameContext *PrevStackFrameCtx =
         ParentLC->getCurrentStackFrame();
@@ -70,19 +79,22 @@ void RecursionChecker::checkPreCall(const CallEvent &Call,
     if (PrevFuncDecl != CurFuncDecl)
       continue;
 
-    bool SameArguments = true;
-    for (unsigned i = 0; SameArguments && i < CurFuncDecl->getNumParams();
-         ++i) {
+    bool SameArgs = true;
+    for (unsigned i = 0; SameArgs && i < CurFuncDecl->getNumParams(); ++i) {
       SVal CurArg = Call.getArgSVal(i);
       SVal PrevArg = State->getArgSVal(PrevStackFrameCtx, i);
-      SameArguments = SameArguments && compareArgs(C, State, CurArg, PrevArg);
+      SameArgs = SameArgs && compareArgs(C, State, CurArg, PrevArg);
     }
 
-    if (SameArguments)
+    if (SameArgs)
       emitReport(C);
   }
 }
-
+void RecursionChecker::checkPostCall(const CallEvent &Call,
+                                     CheckerContext &C) const {
+  ProgramStateRef State = C.getState();
+  State->remove<DirtyStackFrames>(C.getStackFrame());
+}
 bool RecursionChecker::compareArgs(CheckerContext &C,
                                    const ProgramStateRef &state,
                                    const SVal &curArg,
@@ -108,7 +120,7 @@ bool RecursionChecker::compareArgs(CheckerContext &C,
 
 bool RecursionChecker::wantsRegionChangeUpdate(
     ProgramStateRef State, const LocationContext *LCtx) const {
-  return false;
+  return true;
 }
 
 ProgramStateRef RecursionChecker::checkRegionChanges(
@@ -116,6 +128,11 @@ ProgramStateRef RecursionChecker::checkRegionChanges(
     ArrayRef<const MemRegion *> ExplicitRegions,
     ArrayRef<const MemRegion *> Regions, const CallEvent *Call,
     const LocationContext *LCtx) const {
+  State->add<DirtyStackFrames>(LCtx->getCurrentStackFrame());
+  for (const auto *ParentLC = LCtx->getCurrentStackFrame()->getParent();
+       ParentLC != nullptr; ParentLC = ParentLC->getParent()) {
+    State->add<DirtyStackFrames>(ParentLC->getCurrentStackFrame());
+  }
   return State;
 }
 
