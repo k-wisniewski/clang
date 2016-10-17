@@ -238,7 +238,7 @@ ExprEngine::createTemporaryRegionIfNeeded(ProgramStateRef State,
   if (V.isUnknown())
     V = getSValBuilder().conjureSymbolVal(Result, LC, TR->getValueType(),
                                           currBldrCtx->blockCount());
-  State = State->bindLoc(Reg, V);
+  State = State->bindLoc(Reg, V, LC);
 
   // Re-apply the casts (from innermost to outermost) for type sanity.
   for (SmallVectorImpl<const CastExpr *>::reverse_iterator I = Casts.rbegin(),
@@ -2136,7 +2136,9 @@ public:
 // (3) We are binding to a MemRegion with stack storage that the store
 //     does not understand.
 ProgramStateRef ExprEngine::processPointerEscapedOnBind(ProgramStateRef State,
-                                                        SVal Loc, SVal Val) {
+                                                        SVal Loc,
+                                                        SVal Val,
+                                                        const LocationContext *LCtx) {
   // Are we storing to something that causes the value to "escape"?
   bool escapes = true;
 
@@ -2152,7 +2154,7 @@ ProgramStateRef ExprEngine::processPointerEscapedOnBind(ProgramStateRef State,
       // same state.
       SVal StoredVal = State->getSVal(regionLoc->getRegion());
       if (StoredVal != Val)
-        escapes = (State == (State->bindLoc(*regionLoc, Val)));
+        escapes = (State == (State->bindLoc(*regionLoc, Val, LCtx)));
     }
   }
 
@@ -2249,7 +2251,7 @@ void ExprEngine::evalBind(ExplodedNodeSet &Dst, const Stmt *StoreE,
     const ProgramPoint L = PostStore(StoreE, LC, /*Loc*/nullptr,
                                      /*tag*/nullptr);
     ProgramStateRef state = Pred->getState();
-    state = processPointerEscapedOnBind(state, location, Val);
+    state = processPointerEscapedOnBind(state, location, Val, LC);
     Bldr.generateNode(L, state, Pred);
     return;
   }
@@ -2259,7 +2261,7 @@ void ExprEngine::evalBind(ExplodedNodeSet &Dst, const Stmt *StoreE,
     ExplodedNode *PredI = *I;
     ProgramStateRef state = PredI->getState();
 
-    state = processPointerEscapedOnBind(state, location, Val);
+    state = processPointerEscapedOnBind(state, location, Val, LC);
 
     // When binding the value, pass on the hint that this is a initialization.
     // For initializations, we do not need to inform clients of region
@@ -2491,7 +2493,7 @@ void ExprEngine::VisitGCCAsmStmt(const GCCAsmStmt *A, ExplodedNode *Pred,
     assert (!X.getAs<NonLoc>());  // Should be an Lval, or unknown, undef.
 
     if (Optional<Loc> LV = X.getAs<Loc>())
-      state = state->bindLoc(*LV, UnknownVal());
+      state = state->bindLoc(*LV, UnknownVal(), Pred->getLocationContext());
   }
 
   Bldr.generateNode(A, Pred, state);

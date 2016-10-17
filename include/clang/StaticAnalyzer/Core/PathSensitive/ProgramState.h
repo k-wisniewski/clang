@@ -233,7 +233,7 @@ public:
                           const LocationContext *LCtx,
                           bool notifyChanges = true) const;
 
-  ProgramStateRef bindLoc(SVal location, SVal V) const;
+  ProgramStateRef bindLoc(SVal location, SVal V, const LocationContext *LCtx) const;
 
   ProgramStateRef bindDefault(SVal loc, SVal V, const LocationContext *LCtx) const;
 
@@ -689,9 +689,9 @@ ProgramState::assumeWithinInclusiveRange(DefinedOrUnknownSVal Val,
       ->assumeWithinInclusiveRangeDual(this, Val.castAs<NonLoc>(), From, To);
 }
 
-inline ProgramStateRef ProgramState::bindLoc(SVal LV, SVal V) const {
+inline ProgramStateRef ProgramState::bindLoc(SVal LV, SVal V, const LocationContext *LCtx) const {
   if (Optional<Loc> L = LV.getAs<Loc>())
-    return bindLoc(*L, V);
+    return bindLoc(*L, V, LCtx);
   return this;
 }
 

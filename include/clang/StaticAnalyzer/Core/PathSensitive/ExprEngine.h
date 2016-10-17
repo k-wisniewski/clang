@@ -511,7 +511,9 @@ protected:
 
   /// Call PointerEscape callback when a value escapes as a result of bind.
   ProgramStateRef processPointerEscapedOnBind(ProgramStateRef State,
-                                              SVal Loc, SVal Val) override;
+                                              SVal Loc,
+                                              SVal Val,
+                                              const LocationContext *LCtx) override;
   /// Call PointerEscape callback when a value escapes as a result of
   /// region invalidation.
   /// \param[in] ITraits Specifies invalidation traits for regions/symbols.

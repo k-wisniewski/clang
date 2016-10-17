@@ -3639,7 +3639,7 @@ void RetainCountChecker::checkBind(SVal loc, SVal val, const Stmt *S,
       // same state.
       SVal StoredVal = state->getSVal(regionLoc->getRegion());
       if (StoredVal != val)
-        escapes = (state == (state->bindLoc(*regionLoc, val)));
+        escapes = (state == (state->bindLoc(*regionLoc, val, C.getLocationContext())));
     }
     if (!escapes) {
       // Case 4: We do not currently model what happens when a symbol is

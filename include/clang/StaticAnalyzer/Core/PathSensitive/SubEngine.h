@@ -148,7 +148,7 @@ public:
   }
 
   virtual ProgramStateRef
-  processPointerEscapedOnBind(ProgramStateRef State, SVal Loc, SVal Val) = 0;
+  processPointerEscapedOnBind(ProgramStateRef State, SVal Loc, SVal Val, const LocationContext *LCtx) = 0;
 
   virtual ProgramStateRef
   notifyCheckersOfPointerEscape(ProgramStateRef State,

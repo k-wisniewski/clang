@@ -1945,8 +1945,12 @@ void CStringChecker::evalStrsep(CheckerContext &C, const CallExpr *CE) const {
     // Overwrite the search string pointer. The new value is either an address
     // further along in the same string, or NULL if there are no more tokens.
     State = State->bindLoc(*SearchStrLoc,
-                           SVB.conjureSymbolVal(getTag(), CE, LCtx, CharPtrTy,
-                                                C.blockCount()));
+                           SVB.conjureSymbolVal(getTag(),
+                                                CE,
+                                                LCtx,
+                                                CharPtrTy,
+                                                C.blockCount()),
+                           LCtx);
   } else {
     assert(SearchStrVal.isUnknown());
     // Conjure a symbolic value. It's the best we can do.
