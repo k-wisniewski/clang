@@ -616,7 +616,7 @@ void test_inline() {
 }
 
 void test_alloca_in_a_recursive_function(int p1) {
-    __builtin_alloca (p1);
+    __builtin_alloca (p1); // expected-warning {{Infinite recursion detected}}
     test_alloca_in_a_recursive_function(1);
     test_alloca_in_a_recursive_function(2);
 }

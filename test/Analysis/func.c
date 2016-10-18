@@ -7,7 +7,7 @@ void f(void) {
   void (*p)(void);
   p = f;
   p = &f;
-  p();
+  p(); // expected-warning {{Infinite recursion detected}}
   (*p)();
 }
 
