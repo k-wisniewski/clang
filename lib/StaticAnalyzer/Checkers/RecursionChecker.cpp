@@ -18,10 +18,11 @@
 #include "clang/StaticAnalyzer/Core/PathSensitive/CallEvent.h"
 #include "clang/StaticAnalyzer/Core/PathSensitive/CheckerContext.h"
 
-using namespace clang;
-using namespace ento;
+REGISTER_SET_WITH_PROGRAMSTATE(DirtyStackFrames, const clang::StackFrameContext *)
 
 namespace {
+using namespace clang;
+using namespace ento;
 
 class RecursionChecker
     : public Checker<check::PreCall, check::RegionChanges, check::PostCall> {
@@ -49,17 +50,17 @@ public:
 };
 }
 
-REGISTER_SET_WITH_PROGRAMSTATE(DirtyStackFrames, const StackFrameContext *)
 
 void RecursionChecker::checkPreCall(const CallEvent &Call,
                                     CheckerContext &C) const {
 
   const FunctionDecl *CurFuncDecl =
-      (const FunctionDecl *)C.getStackFrame()->getDecl();
+      dyn_cast_or_null<FunctionDecl>(Call.getDecl());
+  if (!CurFuncDecl)
+    return;
   CurFuncDecl = CurFuncDecl->getCanonicalDecl();
 
   const ProgramStateRef State = C.getState();
-  const DirtyStackFramesTy DirtyStackFramesSet = State->get<DirtyStackFrames>();
 
   for (const auto *ParentLC = C.getStackFrame()->getParent();
        ParentLC != nullptr; ParentLC = ParentLC->getParent()) {
@@ -67,11 +68,13 @@ void RecursionChecker::checkPreCall(const CallEvent &Call,
     if (ParentLC->getKind() != LocationContext::StackFrame)
       continue;
 
-    if (DirtyStackFramesSet.contains(ParentLC->getCurrentStackFrame()))
-      break;
 
     const StackFrameContext *PrevStackFrameCtx =
         ParentLC->getCurrentStackFrame();
+
+    if (State->contains<DirtyStackFrames>(PrevStackFrameCtx))
+      return;
+
     const FunctionDecl *PrevFuncDecl =
         (const FunctionDecl *)PrevStackFrameCtx->getDecl();
     PrevFuncDecl = PrevFuncDecl->getCanonicalDecl();
@@ -128,10 +131,10 @@ ProgramStateRef RecursionChecker::checkRegionChanges(
     ArrayRef<const MemRegion *> ExplicitRegions,
     ArrayRef<const MemRegion *> Regions, const CallEvent *Call,
     const LocationContext *LCtx) const {
-  State->add<DirtyStackFrames>(LCtx->getCurrentStackFrame());
+  State = State->add<DirtyStackFrames>(LCtx->getCurrentStackFrame());
   for (const auto *ParentLC = LCtx->getCurrentStackFrame()->getParent();
        ParentLC != nullptr; ParentLC = ParentLC->getParent()) {
-    State->add<DirtyStackFrames>(ParentLC->getCurrentStackFrame());
+    State = State->add<DirtyStackFrames>(ParentLC->getCurrentStackFrame());
   }
   return State;
 }
