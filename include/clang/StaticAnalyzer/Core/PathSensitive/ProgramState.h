@@ -14,6 +14,7 @@
 #ifndef LLVM_CLANG_STATICANALYZER_CORE_PATHSENSITIVE_PROGRAMSTATE_H
 #define LLVM_CLANG_STATICANALYZER_CORE_PATHSENSITIVE_PROGRAMSTATE_H
 
+#include "clang/AST/ExprCXX.h"
 #include "clang/Basic/LLVM.h"
 #include "clang/StaticAnalyzer/Core/PathSensitive/ConstraintManager.h"
 #include "clang/StaticAnalyzer/Core/PathSensitive/DynamicTypeInfo.h"
@@ -296,6 +297,16 @@ public:
   /// Get the symbolic value of arguments used in a call
   /// that created the given stack frame
   SVal getArgSVal(const StackFrameContext *SFC, const unsigned ArgIdx) const;
+
+  /// Get the symbolic value of the "this" object for a method call
+  /// that created the given stack frame. Returns None if the
+  /// stack frame does not represent a method call.
+  Optional<SVal> getThisSVal(const StackFrameContext *SFC) const;
+
+  /// Get the symbolic value of the receiveer object for a method call
+  /// that created the given stack frame. Returns None if the
+  /// stack frame does not represent a method call.
+  Optional<SVal> getObjCMessageReceiverSVal(const StackFrameContext *SFC) const;
 
   /// Returns the SVal bound to the statement 'S' in the state's environment.
   SVal getSVal(const Stmt *S, const LocationContext *LCtx) const;
@@ -753,6 +764,42 @@ inline SVal ProgramState::getArgSVal(const StackFrameContext *SFC,
     const CallExpr *callSiteExpr = dyn_cast<CallExpr>(callSite);
     const Expr *argExpr = callSiteExpr->getArg(ArgIdx);
     return getSVal(argExpr, SFC->getParent());
+  }
+}
+
+inline Optional<SVal>
+ProgramState::getThisSVal(const StackFrameContext *SFC) const {
+  if (SFC->inTopFrame()) {
+    const FunctionDecl *FD = SFC->getDecl()->getAsFunction();
+    if (!FD)
+      return None;
+    const CXXMethodDecl *MD = dyn_cast_or_null<CXXMethodDecl>(FD->getParent());
+    if (!MD)
+      return None;
+    Loc ThisLoc = getStateManager().getSValBuilder().getCXXThis(MD, SFC);
+    return getSVal(ThisLoc);
+  } else {
+    const Stmt *S = SFC->getCallSite();
+    if (!S)
+      return None;
+    if (const auto *MCE = dyn_cast<CXXMemberCallExpr>(S))
+      return getSVal(MCE->getImplicitObjectArgument(), SFC->getParent());
+    else if (const auto *CCE = dyn_cast<CXXConstructExpr>(S))
+      return getSVal(CCE, SFC->getParent());
+    return None;
+  }
+}
+
+inline Optional<SVal>
+ProgramState::getObjCMessageReceiverSVal(const StackFrameContext *SFC) const {
+  if (SFC->inTopFrame()) {
+    const ObjCMethodDecl *methodDecl = dyn_cast<ObjCMethodDecl>(SFC->getDecl());
+    Loc SelfLoc = getLValue(methodDecl->getSelfDecl(), SFC);
+    return getSVal(SelfLoc);
+  } else {
+    const ObjCMessageExpr *messageExpr =
+        dyn_cast<ObjCMessageExpr>(SFC->getCallSite());
+    return getSVal(messageExpr->getInstanceReceiver(), SFC);
   }
 }
 
