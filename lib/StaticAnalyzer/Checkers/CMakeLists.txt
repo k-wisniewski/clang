@@ -40,6 +40,7 @@ add_clang_library(clangStaticAnalyzerCheckers
   GTestChecker.cpp
   IdenticalExprChecker.cpp
   IteratorPastEndChecker.cpp
+  RecursionChecker.cpp
   IvarInvalidationChecker.cpp
   LLVMConventionsChecker.cpp
   LocalizationChecker.cpp
