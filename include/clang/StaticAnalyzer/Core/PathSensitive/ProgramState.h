@@ -294,10 +294,6 @@ public:
   /// Get the lvalue for an array index.
   SVal getLValue(QualType ElementType, SVal Idx, SVal Base) const;
 
-  /// Get the symbolic value of arguments used in a call
-  /// that created the given stack frame
-  SVal getArgSVal(const StackFrameContext *SFC, const unsigned ArgIdx) const;
-
   /// Get the symbolic value of the "this" object for a method call
   /// that created the given stack frame. Returns None if the
   /// stack frame does not represent a method call.
@@ -737,35 +733,7 @@ inline SVal ProgramState::getLValue(QualType ElementType, SVal Idx, SVal Base) c
   return UnknownVal();
 }
 
-inline SVal ProgramState::getArgSVal(const StackFrameContext *SFC,
-                                     const unsigned ArgIdx) const {
-  const FunctionDecl *FunctionDecl = SFC->getDecl()->getAsFunction();
-  const ObjCMethodDecl *MethodDecl =
-      dyn_cast_or_null<ObjCMethodDecl>(SFC->getDecl());
-  unsigned NumArgs = FunctionDecl
-                     ? FunctionDecl->getNumParams()
-                     : MethodDecl->getSelector().getNumArgs();
-  assert(ArgIdx < NumArgs && "Arg access out of range!");
 
-  if (SFC->inTopFrame()) {
-    // if we are in the top frame we don't have any arguments bound in
-    // the environment because the call wasn't modeled in the first place.
-    const VarDecl *ArgDecl = FunctionDecl
-                             ? FunctionDecl->parameters()[ArgIdx]
-                             : MethodDecl->parameters()[ArgIdx];
-    const Loc ArgLoc = getLValue(ArgDecl, SFC);
-    StoreManager &storeMgr = stateMgr->getStoreManager();
-    Store initialStore = storeMgr.getInitialStore(SFC).getStore();
-    return storeMgr.getBinding(initialStore, ArgLoc);
-  } else {
-    // in this case we need to ask the environment as  the arguments' memory
-    // region may have been purged as no longer needed.
-    const Stmt *callSite = SFC->getCallSite();
-    const CallExpr *callSiteExpr = dyn_cast<CallExpr>(callSite);
-    const Expr *argExpr = callSiteExpr->getArg(ArgIdx);
-    return getSVal(argExpr, SFC->getParent());
-  }
-}
 
 inline Optional<SVal>
 ProgramState::getThisSVal(const StackFrameContext *SFC) const {
