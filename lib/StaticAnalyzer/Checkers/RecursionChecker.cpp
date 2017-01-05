@@ -55,12 +55,15 @@ class RecursionChecker : public Checker<check::PreCall,
                              const StackFrameContext *SFC,
                              CheckerContext &C) const;
 
-  bool checkAllArgumentsSame(const CallEvent &Call,
+  bool checkAllArgumentsSame(const CallEvent &CurrentCall,
                              const StackFrameContext *SFC,
                              CheckerContext &C) const;
 
   void checkPreCallImpl(const CallEvent &Call, CheckerContext &C) const;
 
+  SVal getArgSValInTopFrame(const StackFrameContext *SFC,
+                            const unsigned ArgIdx,
+                            ProgramStateRef StateMgr) const;
 public:
   void checkPreCall(const CallEvent &Call, CheckerContext &C) const {
     checkPreCallImpl(Call, C);
@@ -124,16 +127,45 @@ void RecursionChecker::checkPreCallImpl(const CallEvent &Call,
   }
 }
 
+inline SVal
+RecursionChecker::getArgSValInTopFrame(const StackFrameContext *SFC,
+                                       const unsigned ArgIdx,
+                                       ProgramStateRef State) const {
+  const FunctionDecl *FunctionDecl = SFC->getDecl()->getAsFunction();
+  const ObjCMethodDecl *MethodDecl =
+      dyn_cast_or_null<ObjCMethodDecl>(SFC->getDecl());
+  unsigned NumArgs = FunctionDecl
+                     ? FunctionDecl->getNumParams()
+                     : MethodDecl->getSelector().getNumArgs();
+  assert(ArgIdx < NumArgs && "Arg access out of range!");
+  assert(SFC->inTopFrame() && "For frames that are not top use CallEvent API");
+
+  const VarDecl *ArgDecl = FunctionDecl
+                           ? FunctionDecl->parameters()[ArgIdx]
+                           : MethodDecl->parameters()[ArgIdx];
+  const Loc ArgLoc = State->getLValue(ArgDecl, SFC);
+  StoreManager &StoreMgr = State->getStateManager().getStoreManager();
+  Store initialStore = StoreMgr.getInitialStore(SFC).getStore();
+  return StoreMgr.getBinding(initialStore, ArgLoc);
+}
+
 inline bool
-RecursionChecker::checkAllArgumentsSame(const CallEvent &Call,
+RecursionChecker::checkAllArgumentsSame(const CallEvent &CurrentCall,
                                         const StackFrameContext *SFC,
                                         CheckerContext &C) const {
   bool SameArgs = true;
-  for (unsigned i = 0; SameArgs && i < Call.getNumArgs(); ++i) {
-    SVal CurArg = Call.getArgSVal(i);
-    SVal PrevArg = C.getState()->getArgSVal(SFC, i);
+  CallEventManager &Mgr = C.getState()->getStateManager().getCallEventManager();
+  for (unsigned i = 0; SameArgs && i < CurrentCall.getNumArgs(); ++i) {
+    SVal CurArg = CurrentCall.getArgSVal(i);
+    SVal PrevArg;
+    if (!SFC->inTopFrame()) {
+      PrevArg = Mgr.getCaller(SFC, C.getState())->getArgSVal(i);
+    } else {
+      PrevArg = getArgSValInTopFrame(SFC, i, C.getState());
+    }
     SameArgs = SameArgs && compareArgs(CurArg, PrevArg, C);
   }
+
   return SameArgs;
 }
 
