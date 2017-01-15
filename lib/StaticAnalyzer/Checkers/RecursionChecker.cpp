@@ -47,19 +47,31 @@ class RecursionChecker : public Checker<check::PreCall,
                    const SVal &prevArg,
                    CheckerContext &C) const;
 
-  bool checkReceiversSame(const CallEvent &Call,
-                          const StackFrameContext *SFC,
+  bool checkReceiversSameInTopFrame(const CallEvent &CurrentCall,
+                                    const StackFrameContext *SFC,
+                                    CheckerContext &C) const;
+
+  bool checkReceiversSame(const CallEvent &CurrentCall,
+                          const CallEvent &PrevCall,
                           CheckerContext &C) const;
 
-  bool checkThisPointersSame(const CallEvent &Call,
-                             const StackFrameContext *SFC,
+  bool checkThisPointersSameInTopFrame(const CallEvent &CurrentCall,
+                                       const StackFrameContext *SFC,
+                                       CheckerContext &C) const;
+
+  bool checkThisPointersSame(const CallEvent &CurrentCall,
+                             const CallEvent &PrevCall,
                              CheckerContext &C) const;
+
+  bool checkAllArgumentsSameInTopFrame(const CallEvent &CurrentCall,
+                                       const StackFrameContext *SFC,
+                                       CheckerContext &C) const;
 
   bool checkAllArgumentsSame(const CallEvent &CurrentCall,
-                             const StackFrameContext *SFC,
+                             const CallEvent &PrevCall,
                              CheckerContext &C) const;
 
-  void checkPreCallImpl(const CallEvent &Call, CheckerContext &C) const;
+  void checkPreCallImpl(const CallEvent &CurrentCall, CheckerContext &C) const;
 
   SVal getArgSValInTopFrame(const StackFrameContext *SFC,
                             const unsigned ArgIdx,
@@ -105,25 +117,39 @@ void RecursionChecker::checkPostCall(const CallEvent &Call,
   State->remove<DirtyStackFrames>(C.getStackFrame());
 }
 
-void RecursionChecker::checkPreCallImpl(const CallEvent &Call,
+void RecursionChecker::checkPreCallImpl(const CallEvent &CurrentCall,
                                         CheckerContext &C) const {
 
+  CallEventManager &Mgr = C.getState()->getStateManager().getCallEventManager();
   for (const auto *SFC = C.getStackFrame();
        SFC != nullptr;
        SFC = SFC->getParent()->getCurrentStackFrame()) {
     if (C.getState()->contains<DirtyStackFrames>(SFC))
       return;
 
-    if (Call.getDecl() != SFC->getDecl())
+    if (CurrentCall.getDecl() != SFC->getDecl())
       continue;
 
-    if (isa<ObjCMethodCall>(Call) && !checkReceiversSame(Call, SFC, C))
-      continue;
-    else if (!checkThisPointersSame(Call, SFC, C))
-      continue;
+    if (SFC->inTopFrame()) {
+      if (isa<ObjCMethodCall>(CurrentCall)
+          && !checkReceiversSameInTopFrame( CurrentCall, SFC, C))
+        continue;
+      else if (!checkThisPointersSameInTopFrame(CurrentCall, SFC, C))
+        continue;
 
-    if (checkAllArgumentsSame(Call, SFC, C))
-      emitReport(C);
+      if (checkAllArgumentsSameInTopFrame(CurrentCall, SFC, C))
+        emitReport(C);
+    } else {
+      CallEventRef<> PrevCall = Mgr.getCaller(SFC, C.getState());
+      if (isa<ObjCMethodCall>(CurrentCall)
+          && !checkReceiversSame(CurrentCall, *PrevCall, C))
+        continue;
+      else if (!checkThisPointersSame(CurrentCall, *PrevCall, C))
+        continue;
+
+      if (checkAllArgumentsSame(CurrentCall, *PrevCall, C))
+        emitReport(C);
+    };
   }
 }
 
@@ -150,19 +176,26 @@ RecursionChecker::getArgSValInTopFrame(const StackFrameContext *SFC,
 }
 
 inline bool
-RecursionChecker::checkAllArgumentsSame(const CallEvent &CurrentCall,
-                                        const StackFrameContext *SFC,
-                                        CheckerContext &C) const {
+RecursionChecker::checkAllArgumentsSameInTopFrame(const CallEvent &CurrentCall,
+                                                  const StackFrameContext *SFC,
+                                                  CheckerContext &C) const {
   bool SameArgs = true;
-  CallEventManager &Mgr = C.getState()->getStateManager().getCallEventManager();
   for (unsigned i = 0; SameArgs && i < CurrentCall.getNumArgs(); ++i) {
     SVal CurArg = CurrentCall.getArgSVal(i);
-    SVal PrevArg;
-    if (!SFC->inTopFrame()) {
-      PrevArg = Mgr.getCaller(SFC, C.getState())->getArgSVal(i);
-    } else {
-      PrevArg = getArgSValInTopFrame(SFC, i, C.getState());
-    }
+    SVal PrevArg = getArgSValInTopFrame(SFC, i, C.getState());
+    SameArgs = SameArgs && compareArgs(CurArg, PrevArg, C);
+  }
+
+  return SameArgs;
+}
+inline bool
+RecursionChecker::checkAllArgumentsSame(const CallEvent &CurrentCall,
+                                        const CallEvent &PrevCall,
+                                        CheckerContext &C) const {
+  bool SameArgs = true;
+  for (unsigned i = 0; SameArgs && i < CurrentCall.getNumArgs(); ++i) {
+    SVal CurArg = CurrentCall.getArgSVal(i);
+    SVal PrevArg = PrevCall.getArgSVal(i);
     SameArgs = SameArgs && compareArgs(CurArg, PrevArg, C);
   }
 
@@ -170,24 +203,47 @@ RecursionChecker::checkAllArgumentsSame(const CallEvent &CurrentCall,
 }
 
 inline bool
-RecursionChecker::checkThisPointersSame(const CallEvent &Call,
-                                        const StackFrameContext *SFC,
-                                        CheckerContext &C) const {
-  const Optional<SVal> CurThis = getThisArgument(Call);
+RecursionChecker::checkThisPointersSameInTopFrame(const CallEvent &CurrentCall,
+                                                  const StackFrameContext *SFC,
+                                                  CheckerContext &C) const {
+  const Optional<SVal> CurThis = getThisArgument(CurrentCall);
   const Optional<SVal> PrevThis = C.getState()->getThisSVal(SFC);
 
   return !CurThis || compareArgs(*CurThis, *PrevThis, C);
 }
 
 inline bool
-RecursionChecker::checkReceiversSame(const CallEvent &Call,
-                                     const StackFrameContext *SFC,
-                                     CheckerContext &C) const {
-  const ObjCMethodCall *Msg_ = dyn_cast<const ObjCMethodCall>(&Call);
+RecursionChecker::checkThisPointersSame(const CallEvent &CurrentCall,
+                                        const CallEvent &PrevCall,
+                                        CheckerContext &C) const {
+  const Optional<SVal> CurThis = getThisArgument(CurrentCall);
+  const Optional<SVal> PrevThis = getThisArgument(PrevCall);
+
+  return !CurThis || compareArgs(*CurThis, *PrevThis, C);
+}
+
+inline bool
+RecursionChecker::checkReceiversSameInTopFrame(const CallEvent &CurrentCall,
+                                               const StackFrameContext *SFC,
+                                               CheckerContext &C) const {
+  const ObjCMethodCall *Msg_ = dyn_cast<const ObjCMethodCall>(&CurrentCall);
 
   const SVal CurReceiver = Msg_->getReceiverSVal();
   const Optional<SVal> PrevReceiver =
       C.getState()->getObjCMessageReceiverSVal(SFC);
+
+  return PrevReceiver && *PrevReceiver == CurReceiver;
+}
+
+inline bool
+RecursionChecker::checkReceiversSame(const CallEvent &CurrentCall,
+                                     const CallEvent &PrevCall,
+                                     CheckerContext &C) const {
+  const ObjCMethodCall *CurMsg = dyn_cast<const ObjCMethodCall>(&CurrentCall);
+  const ObjCMethodCall *PrevMsg = dyn_cast<const ObjCMethodCall>(&CurrentCall);
+
+  const SVal CurReceiver = CurMsg->getReceiverSVal();
+  const Optional<SVal> PrevReceiver = PrevMsg->getReceiverSVal();
 
   return PrevReceiver && *PrevReceiver == CurReceiver;
 }
