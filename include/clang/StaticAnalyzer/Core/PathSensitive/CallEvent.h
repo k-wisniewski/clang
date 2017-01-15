@@ -472,6 +472,10 @@ protected:
   SimpleFunctionCall(const CallExpr *CE, ProgramStateRef St,
                      const LocationContext *LCtx)
     : AnyFunctionCall(CE, St, LCtx) {}
+  SimpleFunctionCall(const FunctionDecl *D,
+                     ProgramStateRef St,
+                     const LocationContext *LCtx)
+    : AnyFunctionCall(D, St, LCtx) {}
   SimpleFunctionCall(const SimpleFunctionCall &Other)
     : AnyFunctionCall(Other) {}
   void cloneTo(void *Dest) const override {
@@ -653,6 +657,10 @@ protected:
                 const LocationContext *LCtx)
     : CXXInstanceCall(CE, St, LCtx) {}
 
+  CXXMemberCall(const CXXMethodDecl *D, ProgramStateRef St,
+                const LocationContext *LCtx)
+    : CXXInstanceCall(D, St, LCtx) {}
+
   CXXMemberCall(const CXXMemberCall &Other) : CXXInstanceCall(Other) {}
   void cloneTo(void *Dest) const override { new (Dest) CXXMemberCall(*this); }
 
@@ -790,6 +798,12 @@ protected:
     Data = Target;
   }
 
+  CXXConstructorCall(const CXXConstructorDecl *D, const MemRegion *Target,
+                     ProgramStateRef St, const LocationContext *LCtx)
+    : AnyFunctionCall(D, St, LCtx) {
+    Data = Target;
+  }
+
   CXXConstructorCall(const CXXConstructorCall &Other) : AnyFunctionCall(Other){}
   void cloneTo(void *Dest) const override { new (Dest) CXXConstructorCall(*this); }
 
@@ -887,6 +901,13 @@ protected:
   ObjCMethodCall(const ObjCMessageExpr *Msg, ProgramStateRef St,
                  const LocationContext *LCtx)
     : CallEvent(Msg, St, LCtx) {
+    Data = nullptr;
+  }
+
+  ObjCMethodCall(const ObjCMethodDecl *D,
+                 ProgramStateRef St,
+                 const LocationContext *LCtx)
+    : CallEvent(D, St, LCtx) {
     Data = nullptr;
   }
 
