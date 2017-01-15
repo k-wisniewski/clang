@@ -1125,7 +1125,31 @@ CallEventManager::getCaller(const StackFrameContext *CalleeCtx,
                             ProgramStateRef State) {
   const LocationContext *ParentCtx = CalleeCtx->getParent();
   const LocationContext *CallerCtx = ParentCtx->getCurrentStackFrame();
-  assert(CallerCtx && "This should not be used for top-level stack frames");
+
+  if (!CallerCtx) {
+    const Decl *CalleeDecl = CalleeCtx->getDecl();
+    if (isa<ObjCMethodDecl>(CalleeDecl))
+      return create<ObjCMethodCall>(dyn_cast<ObjCMethodDecl>(CalleeDecl),
+                                    State,
+                                    CalleeCtx);
+    else if (isa<CXXMethodDecl>(CalleeDecl))
+      return create<CXXMemberCall>(dyn_cast<CXXMethodDecl>(CalleeDecl),
+                                   State,
+                                   CallerCtx);
+    else if (isa<CXXConstructorDecl>(CalleeDecl)) {
+      SValBuilder &SVB = State->getStateManager().getSValBuilder();
+      const CXXMethodDecl *Ctor = cast<CXXMethodDecl>(CalleeCtx->getDecl());
+      Loc ThisPtr = SVB.getCXXThis(Ctor, CalleeCtx);
+      SVal ThisVal = State->getSVal(ThisPtr);
+      return create<CXXConstructorCall>(dyn_cast<CXXConstructorDecl>(CalleeDecl),
+                                        ThisVal.getAsRegion(),
+                                        State,
+                                        CalleeCtx);
+    } else if (isa<FunctionDecl>(CalleeDecl))
+      return create<SimpleFunctionCall>(dyn_cast<FunctionDecl>(CalleeDecl),
+                                        State,
+                                        CalleeCtx);
+  }
 
   const Stmt *CallSite = CalleeCtx->getCallSite();
 
