@@ -76,6 +76,20 @@ class RecursionChecker : public Checker<check::PreCall,
   SVal getArgSValInTopFrame(const StackFrameContext *SFC,
                             const unsigned ArgIdx,
                             ProgramStateRef StateMgr) const;
+
+  inline Optional<SVal>
+  getObjCMessageReceiverSVal(const StackFrameContext *SFC,
+                             CheckerContext& C) const;
+
+  inline Optional<SVal>
+  getObjCMessageReceiverSValInTopFrame(const StackFrameContext *SFC,
+                                       CheckerContext& C) const;
+
+  inline Optional<SVal> getThisSVal(const StackFrameContext *SFC,
+                                    CheckerContext &C) const;
+
+  inline Optional<SVal> getThisSValInTopFrame(const StackFrameContext *SFC,
+                                              CheckerContext& C) const;
 public:
   void checkPreCall(const CallEvent &Call, CheckerContext &C) const {
     checkPreCallImpl(Call, C);
@@ -207,7 +221,7 @@ RecursionChecker::checkThisPointersSameInTopFrame(const CallEvent &CurrentCall,
                                                   const StackFrameContext *SFC,
                                                   CheckerContext &C) const {
   const Optional<SVal> CurThis = getThisArgument(CurrentCall);
-  const Optional<SVal> PrevThis = C.getState()->getThisSVal(SFC);
+  const Optional<SVal> PrevThis = getThisSValInTopFrame(SFC, C);
 
   return !CurThis || compareArgs(*CurThis, *PrevThis, C);
 }
@@ -229,8 +243,7 @@ RecursionChecker::checkReceiversSameInTopFrame(const CallEvent &CurrentCall,
   const ObjCMethodCall *Msg_ = dyn_cast<const ObjCMethodCall>(&CurrentCall);
 
   const SVal CurReceiver = Msg_->getReceiverSVal();
-  const Optional<SVal> PrevReceiver =
-      C.getState()->getObjCMessageReceiverSVal(SFC);
+  const Optional<SVal> PrevReceiver = getObjCMessageReceiverSValInTopFrame(SFC, C);
 
   return PrevReceiver && *PrevReceiver == CurReceiver;
 }
@@ -246,6 +259,50 @@ RecursionChecker::checkReceiversSame(const CallEvent &CurrentCall,
   const Optional<SVal> PrevReceiver = PrevMsg->getReceiverSVal();
 
   return PrevReceiver && *PrevReceiver == CurReceiver;
+}
+
+inline Optional<SVal>
+RecursionChecker::getThisSValInTopFrame(const StackFrameContext *SFC,
+                      CheckerContext& C) const {
+  const FunctionDecl *FD = SFC->getDecl()->getAsFunction();
+  if (!FD)
+    return None;
+  const CXXMethodDecl *MD = dyn_cast_or_null<CXXMethodDecl>(FD->getParent());
+  if (!MD)
+    return None;
+  Loc ThisLoc = C.getState()->getStateManager()
+      .getSValBuilder()
+      .getCXXThis(MD, SFC);
+  return C.getState()->getSVal(ThisLoc);
+}
+
+inline Optional<SVal>
+RecursionChecker::getObjCMessageReceiverSVal(const StackFrameContext *SFC,
+                                             CheckerContext& C) const {
+  const ObjCMessageExpr *messageExpr =
+      dyn_cast<ObjCMessageExpr>(SFC->getCallSite());
+  return C.getState()->getSVal(messageExpr->getInstanceReceiver(), SFC);
+}
+
+inline Optional<SVal>
+RecursionChecker::getObjCMessageReceiverSValInTopFrame(const StackFrameContext *SFC,
+                                                       CheckerContext& C) const {
+  const ObjCMethodDecl *methodDecl = dyn_cast<ObjCMethodDecl>(SFC->getDecl());
+  Loc SelfLoc = C.getState()->getLValue(methodDecl->getSelfDecl(), SFC);
+  return C.getState()->getSVal(SelfLoc);
+}
+
+inline Optional<SVal>
+RecursionChecker::getThisSVal(const StackFrameContext *SFC,
+                              CheckerContext& C) const {
+  const Stmt *S = SFC->getCallSite();
+  if (!S)
+    return None;
+  if (const auto *MCE = dyn_cast<CXXMemberCallExpr>(S))
+    return C.getState()->getSVal(MCE->getImplicitObjectArgument(), SFC->getParent());
+  else if (const auto *CCE = dyn_cast<CXXConstructExpr>(S))
+    return C.getState()->getSVal(CCE, SFC->getParent());
+  return None;
 }
 
 inline void
